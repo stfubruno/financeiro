@@ -1,0 +1,82 @@
+# ══════════════════════════════════════════════════════════════
+#  docker-compose.yml — Financeiro Fullstack
+#
+#  Serviços:
+#    backend  → FastAPI + Gunicorn (porta interna 8000)
+#    frontend → React build + Nginx (porta pública 80)
+#
+#  Volumes:
+#    db_data  → persiste o database.json entre reinicializações
+#
+#  Uso:
+#    docker compose up --build        # build + start
+#    docker compose up -d             # start em background
+#    docker compose down              # para (mantém dados)
+#    docker compose down -v           # para e apaga dados
+#    docker compose logs -f backend   # logs do backend
+# ══════════════════════════════════════════════════════════════
+
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: financeiro-backend
+    restart: unless-stopped
+
+    environment:
+      PORT: "8000"
+      LOG_LEVEL: "info"
+      DB_PATH: "/app/db/database.json"
+      WEB_CONCURRENCY: "2"
+
+    volumes:
+      - db_data:/app/db
+
+    expose:
+      - "8000"
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 20s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+    networks:
+      - financeiro-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: financeiro-frontend
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 20s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+    networks:
+      - financeiro-net
+
+volumes:
+  db_data:
+    name: financeiro-db-data
+
+networks:
+  financeiro-net:
+    name: financeiro-network
+    driver: bridge
